@@ -254,21 +254,34 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // mul = primary ("*" primary | "/" primary)*
+    // mul = unary ("*" unary | "/" unary)*
     fn mul(&mut self) -> Tree {
-        let mut node = self.primary();
+        let mut node = self.unary();
 
         loop {
             if self.lexer.consume('*') {
-                let rhs = self.primary();
+                let rhs = self.unary();
                 node = self.new_node(NodeKind::NodeMul, node, rhs);
             } else if self.lexer.consume('/') {
-                let rhs = self.primary();
+                let rhs = self.unary();
                 node = self.new_node(NodeKind::NodeDiv, node, rhs);
             } else {
                 return node;
             }
         }
+    }
+
+    // unary = ("+" | "-")? primary
+    fn unary(&mut self) -> Tree {
+        if self.lexer.consume('+') {
+            return self.primary();
+        }
+        if self.lexer.consume('-') {
+            let zero = self.new_node_num(String::from("0"));
+            let rhs = self.primary();
+            return self.new_node(NodeKind::NodeSub, zero, rhs);
+        }
+        return self.primary();
     }
 
     // primary = num | "(" expr ")"
