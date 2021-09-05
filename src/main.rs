@@ -30,7 +30,7 @@ struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    pub fn tokenize(string: &'a str) -> Tokenizer {
+    fn tokenize(string: &'a str) -> Self {
         let mut tokenizer = Tokenizer::new_empty(string.chars().peekable());
         let mut next_char: Option<&char>;
         loop {
@@ -40,7 +40,8 @@ impl<'a> Tokenizer<'a> {
                     tokenizer.chars.next();
                     continue;
                 }
-                Some('+') | Some('-') => {
+                // is there a better notation?
+                Some('+') | Some('-') | Some('*') | Some('/') | Some('(') | Some(')') => {
                     tokenizer.new_token(TokenKind::TkReserved);
                     continue;
                 }
@@ -50,7 +51,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 Some(_) => {
                     eprintln!("{}", string);
-                    eprintln!("Not implemented");
+                    eprintln!("tokenizer: Not implemented");
                     process::exit(1);
                 }
                 None => {
@@ -113,7 +114,7 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.head.take().map(|head| {
-            if let Some(next) = head.borrow_mut().next.take() {
+            if let Some(next) = head.borrow().next.clone() {
                 self.head = Some(next);
             }
         });
@@ -131,7 +132,7 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.head.take().map(|head| {
-            if let Some(next) = head.borrow_mut().next.take() {
+            if let Some(next) = head.borrow().next.clone() {
                 self.head = Some(next);
             }
         });
@@ -182,6 +183,136 @@ impl<'a> Tokenizer<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum NodeKind {
+    NodeAdd,
+    NodeSub,
+    NodeMul,
+    NodeDiv,
+    NodeNum,
+}
+
+type Tree = Option<Box<Node>>;
+
+#[derive(Debug, Clone)]
+struct Node {
+    kind: NodeKind,
+    lhs: Tree,
+    rhs: Tree,
+    val: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct Parser<'a> {
+    lexer: Tokenizer<'a>,
+    tree: Tree,
+}
+
+impl<'a> Parser<'a> {
+    pub fn parse(lexer: Tokenizer<'a>) -> Tree {
+        let mut parser = Parser {
+            lexer: lexer,
+            tree: None,
+        };
+        parser.expr()
+    }
+
+    fn new_node(&mut self, kind: NodeKind, lhs: Tree, rhs: Tree) -> Tree {
+        let node = Node {
+            kind: kind,
+            lhs: lhs,
+            rhs: rhs,
+            val: None,
+        };
+        Some(Box::new(node))
+    }
+
+    fn new_node_num(&self, val: String) -> Tree {
+        let node = Node {
+            kind: NodeKind::NodeNum,
+            lhs: None,
+            rhs: None,
+            val: Some(val),
+        };
+        Some(Box::new(node))
+    }
+
+    // expr = mul ("+" mul | "-" mul)*
+    fn expr(&mut self) -> Tree {
+        let mut node = self.mul();
+
+        loop {
+            if self.lexer.consume('+') {
+                let rhs = self.mul();
+                node = self.new_node(NodeKind::NodeAdd, node, rhs);
+            } else if self.lexer.consume('-') {
+                let rhs = self.mul();
+                node = self.new_node(NodeKind::NodeSub, node, rhs);
+            } else {
+                return node;
+            }
+        }
+    }
+
+    // mul = primary ("*" primary | "/" primary)*
+    fn mul(&mut self) -> Tree {
+        let mut node = self.primary();
+
+        loop {
+            if self.lexer.consume('*') {
+                let rhs = self.primary();
+                node = self.new_node(NodeKind::NodeMul, node, rhs);
+            } else if self.lexer.consume('/') {
+                let rhs = self.primary();
+                node = self.new_node(NodeKind::NodeDiv, node, rhs);
+            } else {
+                return node;
+            }
+        }
+    }
+
+    // primary = num | "(" expr ")"
+    fn primary(&mut self) -> Tree {
+        if self.lexer.consume('(') {
+            let node = self.expr();
+            self.lexer.expect(')');
+            return node;
+        }
+        if let Some(val) = self.lexer.expect_number() {
+            self.new_node_num(val)
+        } else {
+            eprintln!("parser: expected number");
+            process::exit(1);
+        }
+    }
+}
+
+fn generate(node: Node) {
+    if node.kind == NodeKind::NodeNum {
+        println!("  push {}", node.val.unwrap());
+        return;
+    }
+
+    generate(*node.lhs.unwrap());
+    generate(*node.rhs.unwrap());
+
+    println!("  pop rdi");
+    println!("  pop rax");
+
+    match node.kind {
+        NodeKind::NodeAdd => println!("  add rax, rdi"),
+        NodeKind::NodeSub => println!("  sub rax, rdi"),
+        NodeKind::NodeMul => println!(" imul rax, rdi"),
+        NodeKind::NodeDiv => {
+            println!("  cqo");
+            println!("  idiv rdi");
+        }
+        _ => eprintln!("Unsupported token kind!"),
+    }
+
+    println!("  push rax");
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -190,23 +321,15 @@ fn main() {
         process::exit(1);
     }
 
-    let mut tokenizer = Tokenizer::tokenize(&args[1]);
-
+    let tokenizer = Tokenizer::tokenize(&args[1]);
+    let node = Parser::parse(tokenizer);
     println!(".intel_syntax noprefix");
     println!(".global main");
     println!("main:");
 
-    println!("  mov rax, {}", tokenizer.expect_number().unwrap());
+    generate(*node.unwrap());
 
-    while !tokenizer.at_eof() {
-        if tokenizer.consume('+') {
-            println!("  add rax, {}", tokenizer.expect_number().unwrap());
-            continue;
-        };
-        tokenizer.expect('-');
-        println!("  sub rax, {}", tokenizer.expect_number().unwrap());
-    }
-
+    println!("  pop rax");
     println!("  ret");
 }
 
