@@ -19,7 +19,7 @@ struct Token {
     kind: TokenKind,
     next: TokenLink,
     val: Option<String>,
-    character: Option<char>,
+    string: String, // token string
 }
 
 #[derive(Debug, Clone)]
@@ -38,16 +38,40 @@ impl<'a> Tokenizer<'a> {
             match next_char {
                 Some(' ') => {
                     tokenizer.chars.next();
-                    continue;
                 }
                 // is there a better notation?
                 Some('+') | Some('-') | Some('*') | Some('/') | Some('(') | Some(')') => {
-                    tokenizer.new_token(TokenKind::TkReserved);
-                    continue;
+                    let string = tokenizer.chars.next().unwrap().to_string();
+                    tokenizer.new_token(TokenKind::TkReserved, string);
+                }
+                Some('=') => {
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    string = Tokenizer::peek_and_append_char(&mut tokenizer, string, '=');
+                    tokenizer.new_token(TokenKind::TkReserved, string);
+                }
+                Some('>') => {
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    string = Tokenizer::peek_and_append_char(&mut tokenizer, string, '=');
+                    tokenizer.new_token(TokenKind::TkReserved, string);
+                }
+                Some('<') => {
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    string = Tokenizer::peek_and_append_char(&mut tokenizer, string, '=');
+                    tokenizer.new_token(TokenKind::TkReserved, string);
+                }
+                Some('!') => {
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    let next_char = tokenizer.chars.next().unwrap_or('\0');
+                    if next_char != '=' {
+                        eprintln!("tokenizer: unexpected token '!'");
+                        process::exit(1);
+                    } else {
+                        string.push(next_char);
+                    }
+                    tokenizer.new_token(TokenKind::TkReserved, string);
                 }
                 Some('0'..='9') => {
-                    tokenizer.new_token(TokenKind::TkNum);
-                    continue;
+                    tokenizer.new_token(TokenKind::TkNum, String::from(""));
                 }
                 Some(_) => {
                     eprintln!("{}", string);
@@ -55,7 +79,7 @@ impl<'a> Tokenizer<'a> {
                     process::exit(1);
                 }
                 None => {
-                    tokenizer.new_token(TokenKind::TkEOF);
+                    tokenizer.new_token(TokenKind::TkEOF, String::from(""));
                     break;
                 }
             }
@@ -72,20 +96,17 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn new_token(&mut self, kind: TokenKind) {
+    fn new_token(&mut self, kind: TokenKind, string: String) {
         let mut val: Option<String> = None;
-        let mut character: Option<char> = None;
         if kind == TokenKind::TkNum {
             val = self.parse_int();
-        } else {
-            character = self.chars.next();
         }
 
         let token = Token {
             kind: kind,
             next: None,
             val: val,
-            character: character,
+            string: string,
         };
         let token_pointer = Rc::new(RefCell::new(token));
 
@@ -101,11 +122,11 @@ impl<'a> Tokenizer<'a> {
         self.current = Some(token_pointer);
     }
 
-    fn expect(&mut self, op: char) {
+    fn expect(&mut self, op: &str) {
         if let Some(head) = self.head.as_ref() {
             let head_ref = head.borrow();
-            if head_ref.kind != TokenKind::TkReserved || head_ref.character != Some(op) {
-                eprintln!("the character is not {}, got={:?}", op, head_ref.character);
+            if head_ref.kind != TokenKind::TkReserved || head_ref.string != op {
+                eprintln!("the character is not {}, got={:?}", op, head_ref.string);
                 process::exit(1);
             }
         } else {
@@ -120,10 +141,10 @@ impl<'a> Tokenizer<'a> {
         });
     }
 
-    fn consume(&mut self, op: char) -> bool {
+    fn consume(&mut self, op: &str) -> bool {
         if let Some(head) = self.head.as_ref() {
             let head_ref = head.borrow();
-            if head_ref.kind != TokenKind::TkReserved || head_ref.character != Some(op) {
+            if head_ref.kind != TokenKind::TkReserved || head_ref.string != op.to_string() {
                 return false;
             }
         } else {
@@ -181,6 +202,20 @@ impl<'a> Tokenizer<'a> {
 
         return Some(integer);
     }
+
+    fn peek_and_append_char(
+        tokenizer: &mut Tokenizer,
+        mut string: String,
+        expected: char,
+    ) -> String {
+        let next_char = tokenizer.chars.peek();
+        match next_char {
+            Some(c) if c == &expected => string.push(tokenizer.chars.next().unwrap()),
+            None => {}
+            _ => eprintln!("tokenizer: not implemented operator"),
+        }
+        return string;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -190,6 +225,10 @@ enum NodeKind {
     NodeMul,
     NodeDiv,
     NodeNum,
+    NodeEQ,
+    NodeNE,
+    NodeLT,
+    NodeLE,
 }
 
 type Tree = Option<Box<Node>>;
@@ -237,15 +276,60 @@ impl<'a> Parser<'a> {
         Some(Box::new(node))
     }
 
-    // expr = mul ("+" mul | "-" mul)*
+    // expr = equality
     fn expr(&mut self) -> Tree {
+        return self.equality();
+    }
+
+    // equality = relational ("==" relational | "!=" relational)*
+    fn equality(&mut self) -> Tree {
+        let mut node = self.relational();
+
+        loop {
+            if self.lexer.consume("==") {
+                let rhs = self.relational();
+                node = self.new_node(NodeKind::NodeEQ, node, rhs)
+            } else if self.lexer.consume("!=") {
+                let rhs = self.relational();
+                node = self.new_node(NodeKind::NodeNE, node, rhs)
+            } else {
+                return node;
+            }
+        }
+    }
+
+    // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+    fn relational(&mut self) -> Tree {
+        let mut node = self.add();
+
+        loop {
+            if self.lexer.consume("<") {
+                let rhs = self.add();
+                node = self.new_node(NodeKind::NodeLT, node, rhs);
+            } else if self.lexer.consume("<=") {
+                let rhs = self.add();
+                node = self.new_node(NodeKind::NodeLE, node, rhs);
+            } else if self.lexer.consume(">") {
+                let lhs = self.add();
+                node = self.new_node(NodeKind::NodeLT, lhs, node);
+            } else if self.lexer.consume(">=") {
+                let lhs = self.add();
+                node = self.new_node(NodeKind::NodeLE, lhs, node);
+            } else {
+                return node;
+            }
+        }
+    }
+
+    // add = mul ("+" mul | "-" mul)*
+    fn add(&mut self) -> Tree {
         let mut node = self.mul();
 
         loop {
-            if self.lexer.consume('+') {
+            if self.lexer.consume("+") {
                 let rhs = self.mul();
                 node = self.new_node(NodeKind::NodeAdd, node, rhs);
-            } else if self.lexer.consume('-') {
+            } else if self.lexer.consume("-") {
                 let rhs = self.mul();
                 node = self.new_node(NodeKind::NodeSub, node, rhs);
             } else {
@@ -259,10 +343,10 @@ impl<'a> Parser<'a> {
         let mut node = self.unary();
 
         loop {
-            if self.lexer.consume('*') {
+            if self.lexer.consume("*") {
                 let rhs = self.unary();
                 node = self.new_node(NodeKind::NodeMul, node, rhs);
-            } else if self.lexer.consume('/') {
+            } else if self.lexer.consume("/") {
                 let rhs = self.unary();
                 node = self.new_node(NodeKind::NodeDiv, node, rhs);
             } else {
@@ -273,10 +357,10 @@ impl<'a> Parser<'a> {
 
     // unary = ("+" | "-")? primary
     fn unary(&mut self) -> Tree {
-        if self.lexer.consume('+') {
+        if self.lexer.consume("+") {
             return self.primary();
         }
-        if self.lexer.consume('-') {
+        if self.lexer.consume("-") {
             let zero = self.new_node_num(String::from("0"));
             let rhs = self.primary();
             return self.new_node(NodeKind::NodeSub, zero, rhs);
@@ -286,9 +370,9 @@ impl<'a> Parser<'a> {
 
     // primary = num | "(" expr ")"
     fn primary(&mut self) -> Tree {
-        if self.lexer.consume('(') {
+        if self.lexer.consume("(") {
             let node = self.expr();
-            self.lexer.expect(')');
+            self.lexer.expect(")");
             return node;
         }
         if let Some(val) = self.lexer.expect_number() {
@@ -319,6 +403,26 @@ fn generate(node: Node) {
         NodeKind::NodeDiv => {
             println!("  cqo");
             println!("  idiv rdi");
+        }
+        NodeKind::NodeEQ => {
+            println!("  cmp rax, rdi");
+            println!("  sete al");
+            println!("  movzb rax, al");
+        }
+        NodeKind::NodeNE => {
+            println!("  cmp rax, rdi");
+            println!("  setne al");
+            println!("  movzb rax, al");
+        }
+        NodeKind::NodeLT => {
+            println!("  cmp rax, rdi");
+            println!("  setl al");
+            println!("  movzb rax, al");
+        }
+        NodeKind::NodeLE => {
+            println!("  cmp rax, rdi");
+            println!("  setle al");
+            println!("  movzb rax, al");
         }
         _ => eprintln!("Unsupported token kind!"),
     }
