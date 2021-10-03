@@ -6,6 +6,7 @@ use std::rc::Rc;
 #[derive(Debug, PartialEq, Clone)]
 enum TokenKind {
     TkReserved,
+    TkIdent,
     TkNum,
     TkEOF,
 }
@@ -40,13 +41,18 @@ impl<'a> Tokenizer<'a> {
                     tokenizer.chars.next();
                 }
                 // is there a better notation?
-                Some('+') | Some('-') | Some('*') | Some('/') | Some('(') | Some(')') => {
+                Some('+') | Some('-') | Some('*') | Some('/') | Some('(') | Some(')')
+                | Some(';') => {
                     let string = tokenizer.chars.next().unwrap().to_string();
                     tokenizer.new_token(TokenKind::TkReserved, string);
                 }
                 Some('=') => {
                     let mut string = tokenizer.chars.next().unwrap().to_string();
-                    string = Tokenizer::peek_and_append_char(&mut tokenizer, string, '=');
+                    let next_char = tokenizer.chars.peek();
+                    match next_char {
+                        Some(c) if c == &'=' => string.push(tokenizer.chars.next().unwrap()),
+                        _ => {}
+                    }
                     tokenizer.new_token(TokenKind::TkReserved, string);
                 }
                 Some('>') => {
@@ -69,6 +75,10 @@ impl<'a> Tokenizer<'a> {
                         string.push(next_char);
                     }
                     tokenizer.new_token(TokenKind::TkReserved, string);
+                }
+                Some('a'..='z') => {
+                    let string = tokenizer.chars.next().unwrap().to_string();
+                    tokenizer.new_token(TokenKind::TkIdent, string)
                 }
                 Some('0'..='9') => {
                     tokenizer.new_token(TokenKind::TkNum, String::from(""));
@@ -177,7 +187,30 @@ impl<'a> Tokenizer<'a> {
         return val.unwrap_or(Some(String::from("")));
     }
 
-    fn at_eof(&mut self) -> bool {
+    pub fn is_ident_token(&mut self) -> Option<String> {
+        let string: Option<String>;
+
+        if let Some(head) = self.head.clone() {
+            let head_ref = head.borrow();
+            if head_ref.kind == TokenKind::TkIdent {
+                string = Some(head_ref.string.clone());
+                self.head.take().map(|head| {
+                    if let Some(next) = head.borrow().next.clone() {
+                        self.head = Some(next);
+                    }
+                });
+            } else {
+                string = None;
+            }
+        } else {
+            eprintln!("lexer: tokenizer's head is None");
+            process::exit(1);
+        }
+
+        string
+    }
+
+    pub fn at_eof(&mut self) -> bool {
         if let Some(ref head) = self.head {
             return head.borrow().kind == TokenKind::TkEOF;
         } else {

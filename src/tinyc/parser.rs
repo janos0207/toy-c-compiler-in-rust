@@ -12,6 +12,8 @@ pub enum NodeKind {
     NodeNE,
     NodeLT,
     NodeLE,
+    NodeAssign,
+    NodeLVar,
 }
 
 type Tree = Option<Box<Node>>;
@@ -22,21 +24,25 @@ pub struct Node {
     pub lhs: Tree,
     pub rhs: Tree,
     pub val: Option<String>,
+    pub offset: u8,
 }
 
 #[derive(Debug, Clone)]
 pub struct Parser<'a> {
     lexer: Tokenizer<'a>,
     tree: Tree,
+    pub code: Vec<Tree>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(lexer: Tokenizer<'a>) -> Tree {
+    pub fn parse(lexer: Tokenizer<'a>) -> Self {
         let mut parser = Parser {
             lexer: lexer,
             tree: None,
+            code: vec![None; 100],
         };
-        parser.expr()
+        parser.program();
+        parser
     }
 
     fn new_node(&mut self, kind: NodeKind, lhs: Tree, rhs: Tree) -> Tree {
@@ -45,6 +51,7 @@ impl<'a> Parser<'a> {
             lhs: lhs,
             rhs: rhs,
             val: None,
+            offset: 0,
         };
         Some(Box::new(node))
     }
@@ -55,13 +62,42 @@ impl<'a> Parser<'a> {
             lhs: None,
             rhs: None,
             val: Some(val),
+            offset: 0,
         };
         Some(Box::new(node))
     }
 
-    // expr = equality
+    // program = stmt*
+    fn program(&mut self) {
+        let mut i = 0;
+        // println!("i: {}", i);
+        while !self.lexer.at_eof() {
+            self.code[i] = self.stmt();
+            i += 1;
+            //println!("program {:?}", self.code[i]);
+        }
+    }
+
+    // stmt = expr ";"
+    fn stmt(&mut self) -> Tree {
+        let node = self.expr();
+        self.lexer.expect(";");
+        return node;
+    }
+
+    // expr = assign
     fn expr(&mut self) -> Tree {
-        return self.equality();
+        return self.assign();
+    }
+
+    // assign = equality ("=" assign)?
+    fn assign(&mut self) -> Tree {
+        let mut node = self.equality();
+        if self.lexer.consume("=") {
+            let rhs = self.assign();
+            node = self.new_node(NodeKind::NodeAssign, node, rhs);
+        }
+        return node;
     }
 
     // equality = relational ("==" relational | "!=" relational)*
@@ -158,6 +194,19 @@ impl<'a> Parser<'a> {
             self.lexer.expect(")");
             return node;
         }
+
+        if let Some(val) = self.lexer.is_ident_token() {
+            // println!("is ident token");
+            let node = Node {
+                kind: NodeKind::NodeLVar,
+                lhs: None,
+                rhs: None,
+                val: Some(val.clone()),
+                offset: (val.clone().as_bytes()[0] - b'a' + 1) * 8,
+            };
+            return Some(Box::new(node));
+        }
+
         if let Some(val) = self.lexer.expect_number() {
             self.new_node_num(val)
         } else {
