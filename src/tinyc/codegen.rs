@@ -33,6 +33,14 @@ pub fn gen_stmt(node: Node) {
             println!("  push rdi");
             return;
         }
+        NodeKind::NodeReturn => {
+            gen_stmt(*node.lhs.unwrap());
+            println!("  pop rax");
+            println!("  mov rsp, rbp");
+            println!("  pop rbp");
+            println!("  ret");
+            return;
+        }
         _ => {}
     }
 

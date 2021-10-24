@@ -7,6 +7,7 @@ use std::rc::Rc;
 enum TokenKind {
     TkReserved,
     TkIdent,
+    TkKeyword,
     TkNum,
     TkEOF,
 }
@@ -112,10 +113,14 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn new_token(&mut self, kind: TokenKind, string: String) {
+    fn new_token(&mut self, mut kind: TokenKind, string: String) {
         let mut val: Option<String> = None;
         if kind == TokenKind::TkNum {
             val = self.parse_int();
+        } else if kind == TokenKind::TkIdent {
+            if string == "return" {
+                kind = TokenKind::TkKeyword;
+            }
         }
 
         let token = Token {
@@ -160,7 +165,10 @@ impl<'a> Tokenizer<'a> {
     pub fn consume(&mut self, op: &str) -> bool {
         if let Some(head) = self.head.as_ref() {
             let head_ref = head.borrow();
-            if head_ref.kind != TokenKind::TkReserved || head_ref.string != op.to_string() {
+            if head_ref.kind != TokenKind::TkReserved && head_ref.kind != TokenKind::TkKeyword {
+                return false;
+            }
+            if head_ref.string != op.to_string() {
                 return false;
             }
         } else {

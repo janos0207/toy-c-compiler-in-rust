@@ -13,6 +13,7 @@ pub enum NodeKind {
     NodeLT,
     NodeLE,
     NodeAssign,
+    NodeReturn,
     NodeLVar,
 }
 
@@ -104,8 +105,16 @@ impl<'a> Parser<'a> {
     }
 
     // stmt = expr ";"
+    //      | "return" expr ";"
     fn stmt(&mut self) -> Tree {
-        let node = self.expr();
+        let node: Tree;
+        if self.lexer.consume("return") {
+            let lhs = self.expr();
+            node = self.new_node(NodeKind::NodeReturn, lhs, None);
+            self.lexer.expect(";");
+            return node;
+        }
+        node = self.expr();
         self.lexer.expect(";");
         return node;
     }
