@@ -1,4 +1,4 @@
-use super::parser::{Node, NodeKind};
+use super::parser::{Node, NodeKind, Parser};
 use std::process;
 
 fn gen_lval(node: &Node) {
@@ -11,22 +11,22 @@ fn gen_lval(node: &Node) {
     println!("  push rax");
 }
 
-pub fn generate(node: Node) {
+pub fn gen_stmt(node: Node) {
     match node.kind {
         NodeKind::NodeNum => {
             println!("  push {}", node.val.unwrap());
             return;
         }
         NodeKind::NodeLVar => {
-            self::gen_lval(&node);
+            gen_lval(&node);
             println!("  pop rax");
             println!("  mov rax, [rax]");
             println!("  push rax");
             return;
         }
         NodeKind::NodeAssign => {
-            self::gen_lval(&node.lhs.unwrap());
-            generate(*node.rhs.unwrap());
+            gen_lval(&node.lhs.unwrap());
+            gen_stmt(*node.rhs.unwrap());
             println!("  pop rdi");
             println!("  pop rax");
             println!("  mov [rax], rdi");
@@ -36,8 +36,8 @@ pub fn generate(node: Node) {
         _ => {}
     }
 
-    generate(*node.lhs.unwrap());
-    generate(*node.rhs.unwrap());
+    gen_stmt(*node.lhs.unwrap());
+    gen_stmt(*node.rhs.unwrap());
 
     println!("  pop rdi");
     println!("  pop rax");
@@ -74,4 +74,43 @@ pub fn generate(node: Node) {
     }
 
     println!("  push rax");
+}
+
+pub fn generate(parser: &Parser) {
+    println!(".intel_syntax noprefix");
+
+    let stack_size = calculate_total_offsets(parser);
+
+    println!(".global main");
+    println!("main:");
+
+    // prologue: allocate the space of 26 variables
+    println!("  push rbp");
+    println!("  mov rbp, rsp");
+    println!("  sub rsp, {}", stack_size);
+
+    let code = parser.code.clone();
+
+    for tree in code {
+        if tree.is_none() {
+            break;
+        }
+        gen_stmt(*tree.unwrap());
+        println!("  pop rax");
+    }
+
+    // epilogue: return the value of the last expression at RAX
+    println!("  mov rsp, rbp");
+    println!("  pop rbp");
+    println!("  ret");
+}
+
+// Round up `n` to the nearest multiple of `align`
+fn align_to(n: usize, align: usize) -> usize {
+    (n + align - 1) / align * align
+}
+
+fn calculate_total_offsets(parser: &Parser) -> usize {
+    let offset = parser.locals.len() * 8;
+    align_to(offset, 16)
 }

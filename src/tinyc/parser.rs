@@ -24,7 +24,13 @@ pub struct Node {
     pub lhs: Tree,
     pub rhs: Tree,
     pub val: Option<String>,
-    pub offset: u8,
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct LVar {
+    name: String,
+    pub offset: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +38,7 @@ pub struct Parser<'a> {
     lexer: Tokenizer<'a>,
     tree: Tree,
     pub code: Vec<Tree>,
+    pub locals: Vec<LVar>,
 }
 
 impl<'a> Parser<'a> {
@@ -40,6 +47,7 @@ impl<'a> Parser<'a> {
             lexer: lexer,
             tree: None,
             code: vec![None; 100],
+            locals: Vec::new(),
         };
         parser.program();
         parser
@@ -67,14 +75,31 @@ impl<'a> Parser<'a> {
         Some(Box::new(node))
     }
 
+    pub fn find_var(&mut self, val: String) -> usize {
+        let mut locals = self.locals.clone();
+        loop {
+            if let Some(local) = locals.pop() {
+                if local.name == val {
+                    return local.offset;
+                }
+            } else {
+                let offset = (self.locals.len() + 1) * 8;
+                let new_var = LVar {
+                    name: val,
+                    offset: offset,
+                };
+                self.locals.push(new_var.clone());
+                return offset;
+            }
+        }
+    }
+
     // program = stmt*
     fn program(&mut self) {
         let mut i = 0;
-        // println!("i: {}", i);
         while !self.lexer.at_eof() {
             self.code[i] = self.stmt();
             i += 1;
-            //println!("program {:?}", self.code[i]);
         }
     }
 
@@ -187,22 +212,20 @@ impl<'a> Parser<'a> {
         return self.primary();
     }
 
-    // primary = num | "(" expr ")"
+    // primary = num | ident | "(" expr ")"
     fn primary(&mut self) -> Tree {
         if self.lexer.consume("(") {
             let node = self.expr();
             self.lexer.expect(")");
             return node;
         }
-
         if let Some(val) = self.lexer.is_ident_token() {
-            // println!("is ident token");
             let node = Node {
                 kind: NodeKind::NodeLVar,
                 lhs: None,
                 rhs: None,
-                val: Some(val.clone()),
-                offset: (val.clone().as_bytes()[0] - b'a' + 1) * 8,
+                val: None,
+                offset: self.find_var(val),
             };
             return Some(Box::new(node));
         }

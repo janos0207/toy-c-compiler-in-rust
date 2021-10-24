@@ -77,8 +77,14 @@ impl<'a> Tokenizer<'a> {
                     tokenizer.new_token(TokenKind::TkReserved, string);
                 }
                 Some('a'..='z') => {
-                    let string = tokenizer.chars.next().unwrap().to_string();
-                    tokenizer.new_token(TokenKind::TkIdent, string)
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    string = Tokenizer::parse_ident(&mut tokenizer, string);
+                    tokenizer.new_token(TokenKind::TkIdent, string);
+                }
+                Some('_') => {
+                    let mut string = tokenizer.chars.next().unwrap().to_string();
+                    string = Tokenizer::parse_ident(&mut tokenizer, string);
+                    tokenizer.new_token(TokenKind::TkIdent, string);
                 }
                 Some('0'..='9') => {
                     tokenizer.new_token(TokenKind::TkNum, String::from(""));
@@ -246,6 +252,21 @@ impl<'a> Tokenizer<'a> {
             Some(c) if c == &expected => string.push(tokenizer.chars.next().unwrap()),
             None => {}
             _ => eprintln!("tokenizer: not implemented operator"),
+        }
+        return string;
+    }
+
+    fn parse_ident(tokenizer: &mut Tokenizer, mut string: String) -> String {
+        loop {
+            let next_char = tokenizer.chars.peek();
+            match next_char {
+                Some('a'..='z') => string.push(tokenizer.chars.next().unwrap()),
+                Some('A'..='Z') => string.push(tokenizer.chars.next().unwrap()),
+                Some('0'..='9') => string.push(tokenizer.chars.next().unwrap()),
+                Some('_') => string.push(tokenizer.chars.next().unwrap()),
+                None => break,
+                _ => break,
+            }
         }
         return string;
     }
