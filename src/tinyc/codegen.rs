@@ -33,6 +33,13 @@ pub fn gen_stmt(node: Node) {
             println!("  push rdi");
             return;
         }
+        NodeKind::NodeBlock => {
+            for stmt in node.body.into_iter() {
+                gen_stmt(*stmt.unwrap());
+                println!("  pop rax");
+            }
+            return;
+        }
         NodeKind::NodeReturn => {
             gen_stmt(*node.lhs.unwrap());
             println!("  pop rax");

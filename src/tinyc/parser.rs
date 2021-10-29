@@ -14,6 +14,7 @@ pub enum NodeKind {
     NodeLE,
     NodeAssign,
     NodeReturn,
+    NodeBlock,
     NodeLVar,
 }
 
@@ -26,6 +27,7 @@ pub struct Node {
     pub rhs: Tree,
     pub val: Option<String>,
     pub offset: usize,
+    pub body: Vec<Tree>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +63,7 @@ impl<'a> Parser<'a> {
             rhs: rhs,
             val: None,
             offset: 0,
+            body: Vec::new(),
         };
         Some(Box::new(node))
     }
@@ -72,6 +75,7 @@ impl<'a> Parser<'a> {
             rhs: None,
             val: Some(val),
             offset: 0,
+            body: Vec::new(),
         };
         Some(Box::new(node))
     }
@@ -106,6 +110,7 @@ impl<'a> Parser<'a> {
 
     // stmt = expr ";"
     //      | "return" expr ";"
+    //      | "{" block
     fn stmt(&mut self) -> Tree {
         let node: Tree;
         if self.lexer.consume("return") {
@@ -114,8 +119,30 @@ impl<'a> Parser<'a> {
             self.lexer.expect(";");
             return node;
         }
+        if self.lexer.consume("{") {
+            return self.block();
+        }
         node = self.expr();
         self.lexer.expect(";");
+        return node;
+    }
+
+    // block = stmt* "}"
+    fn block(&mut self) -> Tree {
+        let mut node = self.new_node(NodeKind::NodeBlock, None, None);
+        let mut body: Vec<Tree> = Vec::new();
+
+        while !self.lexer.consume("}") {
+            body.push(self.stmt());
+        }
+
+        if let Some(node_ref) = node.as_mut() {
+            node_ref.body = body
+        } else {
+            eprintln!("parser: expected node, but not found");
+            process::exit(1);
+        }
+
         return node;
     }
 
@@ -235,6 +262,7 @@ impl<'a> Parser<'a> {
                 rhs: None,
                 val: None,
                 offset: self.find_var(val),
+                body: Vec::new(),
             };
             return Some(Box::new(node));
         }
