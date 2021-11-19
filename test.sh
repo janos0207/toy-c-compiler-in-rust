@@ -51,4 +51,6 @@ assert 2 "1; return 2; 3;"
 assert 3 "1; 2; return 3;"
 assert 1 "retur = 1; retur;"
 assert 4 "{ 1; {2; 3;} return 4;}"
+assert 3 "{ 1; {2; return 3;} 4;}"
+assert 5 "{ ;;; return 5;}"
 echo OK

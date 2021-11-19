@@ -108,11 +108,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // stmt = expr ";"
+    // stmt = expr? ";"
     //      | "return" expr ";"
     //      | "{" block
     fn stmt(&mut self) -> Tree {
         let node: Tree;
+        if self.lexer.consume(";") {
+            node = self.new_node(NodeKind::NodeBlock, None, None);
+            return node;
+        }
         if self.lexer.consume("return") {
             let lhs = self.expr();
             node = self.new_node(NodeKind::NodeReturn, lhs, None);
