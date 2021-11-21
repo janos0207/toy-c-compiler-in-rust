@@ -2,7 +2,7 @@ mod tinyc;
 
 use std::{env, process};
 
-use tinyc::codegen::generate;
+use tinyc::codegen::CodeGen;
 use tinyc::lexer::Tokenizer;
 use tinyc::parser::Parser;
 
@@ -16,5 +16,6 @@ fn main() {
 
     let tokenizer = Tokenizer::tokenize(&args[1]);
     let mut parser = Parser::parse(tokenizer);
-    generate(&mut parser)
+    let mut generator = CodeGen::init();
+    generator.generate(&mut parser)
 }

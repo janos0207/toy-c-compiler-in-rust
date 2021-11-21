@@ -13,6 +13,7 @@ pub enum NodeKind {
     NodeLT,
     NodeLE,
     NodeAssign,
+    NodeIf,
     NodeReturn,
     NodeBlock,
     NodeLVar,
@@ -28,6 +29,11 @@ pub struct Node {
     pub val: Option<String>,
     pub offset: usize,
     pub body: Vec<Tree>,
+
+    // only for ND_IF
+    pub cond: Tree,
+    pub then: Tree,
+    pub els: Tree,
 }
 
 #[derive(Debug, Clone)]
@@ -64,8 +70,26 @@ impl<'a> Parser<'a> {
             val: None,
             offset: 0,
             body: Vec::new(),
+            cond: None,
+            then: None,
+            els: None,
         };
         Some(Box::new(node))
+    }
+
+    fn new_raw_node(&mut self, kind: NodeKind, lhs: Tree, rhs: Tree) -> Node {
+        let node = Node {
+            kind: kind,
+            lhs: lhs,
+            rhs: rhs,
+            val: None,
+            offset: 0,
+            body: Vec::new(),
+            cond: None,
+            then: None,
+            els: None,
+        };
+        node
     }
 
     fn new_node_num(&self, val: String) -> Tree {
@@ -76,6 +100,9 @@ impl<'a> Parser<'a> {
             val: Some(val),
             offset: 0,
             body: Vec::new(),
+            cond: None,
+            then: None,
+            els: None,
         };
         Some(Box::new(node))
     }
@@ -110,6 +137,7 @@ impl<'a> Parser<'a> {
 
     // stmt = expr? ";"
     //      | "return" expr ";"
+    //      | "if" "(" expr ")" stmt ("else" stmt)?
     //      | "{" block
     fn stmt(&mut self) -> Tree {
         let node: Tree;
@@ -117,17 +145,32 @@ impl<'a> Parser<'a> {
             node = self.new_node(NodeKind::NodeBlock, None, None);
             return node;
         }
+
         if self.lexer.consume("return") {
             let lhs = self.expr();
             node = self.new_node(NodeKind::NodeReturn, lhs, None);
             self.lexer.expect(";");
             return node;
         }
+
+        if self.lexer.consume("if") {
+            let mut raw_node = self.new_raw_node(NodeKind::NodeIf, None, None);
+            self.lexer.expect("(");
+            raw_node.cond = self.expr();
+            self.lexer.expect(")");
+            raw_node.then = self.stmt();
+            if self.lexer.consume("else") {
+                raw_node.els = self.stmt();
+            }
+            return Some(Box::new(raw_node));
+        }
+
         if self.lexer.consume("{") {
             return self.block();
         }
         node = self.expr();
         self.lexer.expect(";");
+
         return node;
     }
 
@@ -267,6 +310,9 @@ impl<'a> Parser<'a> {
                 val: None,
                 offset: self.find_var(val),
                 body: Vec::new(),
+                cond: None,
+                then: None,
+                els: None,
             };
             return Some(Box::new(node));
         }

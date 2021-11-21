@@ -118,9 +118,7 @@ impl<'a> Tokenizer<'a> {
         if kind == TokenKind::TkNum {
             val = self.parse_int();
         } else if kind == TokenKind::TkIdent {
-            if string == "return" {
-                kind = TokenKind::TkKeyword;
-            }
+            kind = self.convert_keyword(&string)
         }
 
         let token = Token {
@@ -277,6 +275,17 @@ impl<'a> Tokenizer<'a> {
             }
         }
         return string;
+    }
+
+    fn convert_keyword(&self, string: &str) -> TokenKind {
+        let keywords = vec!["return", "if", "else"];
+
+        for kw in keywords {
+            if string == kw {
+                return TokenKind::TkKeyword;
+            }
+        }
+        return TokenKind::TkIdent;
     }
 }
 
