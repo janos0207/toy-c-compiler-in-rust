@@ -278,7 +278,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn convert_keyword(&self, string: &str) -> TokenKind {
-        let keywords = vec!["return", "if", "else"];
+        let keywords = vec!["return", "if", "else", "for"];
 
         for kw in keywords {
             if string == kw {

@@ -65,6 +65,25 @@ impl CodeGen {
                 self.jmp_counter += 1;
                 return;
             }
+            NodeKind::NodeFor => {
+                if let Some(init) = node.init {
+                    self.gen_stmt(*init);
+                }
+                println!(".L.begin.{}:", self.jmp_counter);
+                if let Some(cond) = node.cond {
+                    self.gen_stmt(*cond);
+                    println!("  cmp rax, 0");
+                    println!("  je .L.end.{}", self.jmp_counter);
+                }
+                self.gen_stmt(*node.then.unwrap());
+                if let Some(inc) = node.inc {
+                    self.gen_stmt(*inc);
+                }
+                println!("  jmp .L.begin.{}", self.jmp_counter);
+                println!(".L.end.{}:", self.jmp_counter);
+                self.jmp_counter += 1;
+                return;
+            }
             NodeKind::NodeReturn => {
                 self.gen_stmt(*node.lhs.unwrap());
                 println!("  pop rax");

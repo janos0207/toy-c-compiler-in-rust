@@ -14,6 +14,7 @@ pub enum NodeKind {
     NodeLE,
     NodeAssign,
     NodeIf,
+    NodeFor,
     NodeReturn,
     NodeBlock,
     NodeLVar,
@@ -30,10 +31,12 @@ pub struct Node {
     pub offset: usize,
     pub body: Vec<Tree>,
 
-    // only for ND_IF
+    // for NodeIf or NodeFor
     pub cond: Tree,
     pub then: Tree,
     pub els: Tree,
+    pub init: Tree,
+    pub inc: Tree,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +76,8 @@ impl<'a> Parser<'a> {
             cond: None,
             then: None,
             els: None,
+            init: None,
+            inc: None,
         };
         Some(Box::new(node))
     }
@@ -88,6 +93,8 @@ impl<'a> Parser<'a> {
             cond: None,
             then: None,
             els: None,
+            init: None,
+            inc: None,
         };
         node
     }
@@ -103,6 +110,8 @@ impl<'a> Parser<'a> {
             cond: None,
             then: None,
             els: None,
+            init: None,
+            inc: None,
         };
         Some(Box::new(node))
     }
@@ -138,6 +147,7 @@ impl<'a> Parser<'a> {
     // stmt = expr? ";"
     //      | "return" expr ";"
     //      | "if" "(" expr ")" stmt ("else" stmt)?
+    //      | "for" "(" expr? ";" expr? ";" expr? ")" stmt
     //      | "{" block
     fn stmt(&mut self) -> Tree {
         let node: Tree;
@@ -162,6 +172,25 @@ impl<'a> Parser<'a> {
             if self.lexer.consume("else") {
                 raw_node.els = self.stmt();
             }
+            return Some(Box::new(raw_node));
+        }
+
+        if self.lexer.consume("for") {
+            let mut raw_node = self.new_raw_node(NodeKind::NodeFor, None, None);
+            self.lexer.expect("(");
+            if !self.lexer.consume(";") {
+                raw_node.init = self.expr();
+                self.lexer.expect(";");
+            }
+            if !self.lexer.consume(";") {
+                raw_node.cond = self.expr();
+                self.lexer.expect(";");
+            }
+            if !self.lexer.consume(")") {
+                raw_node.inc = self.expr();
+                self.lexer.expect(")");
+            }
+            raw_node.then = self.stmt();
             return Some(Box::new(raw_node));
         }
 
@@ -313,6 +342,8 @@ impl<'a> Parser<'a> {
                 cond: None,
                 then: None,
                 els: None,
+                init: None,
+                inc: None,
             };
             return Some(Box::new(node));
         }
