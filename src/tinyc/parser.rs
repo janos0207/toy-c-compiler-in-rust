@@ -14,7 +14,7 @@ pub enum NodeKind {
     NodeLE,
     NodeAssign,
     NodeIf,
-    NodeFor,
+    NodeFor, // for statement & while statement
     NodeReturn,
     NodeBlock,
     NodeLVar,
@@ -190,6 +190,15 @@ impl<'a> Parser<'a> {
                 raw_node.inc = self.expr();
                 self.lexer.expect(")");
             }
+            raw_node.then = self.stmt();
+            return Some(Box::new(raw_node));
+        }
+
+        if self.lexer.consume("while") {
+            let mut raw_node = self.new_raw_node(NodeKind::NodeFor, None, None);
+            self.lexer.expect("(");
+            raw_node.cond = self.expr();
+            self.lexer.expect(")");
             raw_node.then = self.stmt();
             return Some(Box::new(raw_node));
         }
