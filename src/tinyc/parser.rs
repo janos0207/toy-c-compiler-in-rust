@@ -13,6 +13,8 @@ pub enum NodeKind {
     NodeLT,
     NodeLE,
     NodeAssign,
+    NodeAddr,
+    NodeDeref,
     NodeIf,
     NodeFor, // for statement & while statement
     NodeReturn,
@@ -148,6 +150,7 @@ impl<'a> Parser<'a> {
     //      | "return" expr ";"
     //      | "if" "(" expr ")" stmt ("else" stmt)?
     //      | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+    //      | "while" "(" expr ")" strmt
     //      | "{" block
     fn stmt(&mut self) -> Tree {
         let node: Tree;
@@ -320,7 +323,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // unary = ("+" | "-")? primary
+    // unary = ("+" | "-" | "*" | "&")? primary
     fn unary(&mut self) -> Tree {
         if self.lexer.consume("+") {
             return self.primary();
@@ -329,6 +332,14 @@ impl<'a> Parser<'a> {
             let zero = self.new_node_num(String::from("0"));
             let rhs = self.primary();
             return self.new_node(NodeKind::NodeSub, zero, rhs);
+        }
+        if self.lexer.consume("*") {
+            let lhs = self.unary();
+            return self.new_node(NodeKind::NodeDeref, lhs, None);
+        }
+        if self.lexer.consume("&") {
+            let lhs = self.unary();
+            return self.new_node(NodeKind::NodeAddr, lhs, None);
         }
         return self.primary();
     }

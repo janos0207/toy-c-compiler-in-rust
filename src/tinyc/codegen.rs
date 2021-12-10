@@ -10,14 +10,24 @@ impl CodeGen {
         CodeGen { jmp_counter: 0 }
     }
 
-    fn gen_lval(node: &Node) {
-        if node.kind != NodeKind::NodeLVar {
-            eprintln!("the left side value of assignment is not a variable");
-            process::exit(1);
+    fn gen_lval(&mut self, node: Node) {
+        match node.kind {
+            NodeKind::NodeLVar => {
+                //println!("LVAR");
+                println!("  mov rax, rbp");
+                println!("  sub rax, {}", node.offset);
+                println!("  push rax");
+                return;
+            }
+            NodeKind::NodeDeref => {
+                self.gen_stmt(*node.lhs.unwrap());
+                return;
+            }
+            _ => {
+                eprint!("The left side value of assignment is not a variable");
+                process::exit(1);
+            }
         }
-        println!("  mov rax, rbp");
-        println!("  sub rax, {}", node.offset);
-        println!("  push rax");
     }
 
     fn gen_stmt(&mut self, node: Node) {
@@ -27,14 +37,25 @@ impl CodeGen {
                 return;
             }
             NodeKind::NodeLVar => {
-                CodeGen::gen_lval(&node);
+                self.gen_lval(node);
                 println!("  pop rax");
                 println!("  mov rax, [rax]");
                 println!("  push rax");
                 return;
             }
+            NodeKind::NodeDeref => {
+                self.gen_stmt(*node.lhs.unwrap());
+                println!("  pop rax");
+                println!("  mov rax, [rax]");
+                println!("  push rax");
+                return;
+            }
+            NodeKind::NodeAddr => {
+                self.gen_lval(*node.lhs.unwrap());
+                return;
+            }
             NodeKind::NodeAssign => {
-                CodeGen::gen_lval(&node.lhs.unwrap());
+                self.gen_lval(*node.lhs.unwrap());
                 self.gen_stmt(*node.rhs.unwrap());
                 println!("  pop rdi");
                 println!("  pop rax");

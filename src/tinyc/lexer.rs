@@ -43,7 +43,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 // is there a better notation?
                 Some('+') | Some('-') | Some('*') | Some('/') | Some('(') | Some(')')
-                | Some(';') | Some('{') | Some('}') => {
+                | Some(';') | Some('{') | Some('}') | Some('&') => {
                     let string = tokenizer.chars.next().unwrap().to_string();
                     tokenizer.new_token(TokenKind::TkReserved, string);
                 }
